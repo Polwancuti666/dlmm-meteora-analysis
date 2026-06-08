@@ -1,216 +1,297 @@
-# VP Dry-Run Analysis — Solana DLMM Bot
+# ERP & POS Build Guide — From Zero to Production
 
-## Overview
-Analysis of Virtual Position (VP) dry-run data from a Meteora DLMM bot on Solana. The bot runs paper trading (virtual positions) without actual on-chain transactions.
+## Project Overview
+**Beauty & Shine POS-ERP** — Full-stack beauty salon management system.
 
-**Data Sources:**
-- Simulated data: dry-run-state.json (bot's internal state)
-- Real data: Solana RPC (`getAccountInfo` → decode pool account, offset 48 = active_bin)
-
----
-
-## Pool Addresses & Real-Time Data (2026-06-07)
-
-| Pool | Address | Real Active Bin | Bin Step |
-|------|---------|-----------------|----------|
-| HENRY-SOL | `6eR5rRdexbht8aiiQmYq7yKb7EhdD3af22B4mHDmCp8x` | -486 | 100 |
-| Magpie-SOL | `J9qgZAYeycmj5Ct9KmC8RfQZZDVzGwf5VfRoN4KNjnME` | -479 | 80 |
-| Bountywork-SOL | `2C1XgnTarjmMNZpup44BL3rjsuWLPgsF3pHjzwRiXthS` | -485 | 100 |
-| GACHA-SOL | `9bL8Pptpb8M2jEAb63EoarA6Po6Akarpha3JPzQfXGS3` | -463 | 100 |
-| three-SOL | `8eDUNVrNUZ87SLYeihLTM7hJhckdAKqua6hPztuD57pX` | -317 | 80 |
+- **Domain**: beautynshine.web.id
+- **GitHub**: Polwancuti666/pos-erp-v6
+- **Architecture**: FastAPI + React + PostgreSQL
+- **4 Branches**: BSD (Bintaro), HQ (Head Office), DPK (Depok), CBG (Cibinong)
 
 ---
 
-## Bin Range Accuracy Check
+## Tech Stack
 
-### Accuracy Results
-
-| Pool | Simulated | Real | Diff | In Range | Status |
-|------|-----------|------|------|----------|--------|
-| HENRY-SOL | -478 | -486 | -8 | ✅ Yes | ⚠️ Small deviation |
-| Magpie-SOL | -526 | -479 | +47 | ❌ No | ❌ Big deviation |
-| Bountywork-SOL | -489 | -485 | +4 | ✅ Yes | ✅ Accurate |
-| GACHA-SOL | -465 | -463 | +2 | ✅ Yes | ✅ Accurate |
-| three-SOL | -302 | -317 | -15 | ✅ Yes | ⚠️ Medium deviation |
-
-### Summary
-- **In range:** 3/5 (60%)
-- **Accurate (diff ≤ 5):** 2/5 (40%)
-- **Average diff:** 15.2 bins
-
-### Key Findings
-- Bountywork-SOL & GACHA-SOL are highly accurate
-- HENRY-SOL: Small deviation (-8 bins), price moved slightly
-- three-SOL: Medium deviation (-15 bins), relatively new pool
-- Magpie-SOL: Big deviation (+47 bins), likely pool recycled or significant price movement
+| Layer | Technology |
+|-------|------------|
+| Backend | FastAPI (Python) + psycopg v3 |
+| Frontend | React 18 + TypeScript + Vite 5 + Tailwind CSS |
+| Database | PostgreSQL (Docker) |
+| Auth | Custom HMAC-SHA256 JWT (no PyJWT) |
+| Process Manager | systemd (`pos-erp.service`) |
+| Web Server | nginx (reverse proxy + static files) |
+| Tunnel | Cloudflare Zero Trust |
 
 ---
 
-## DLMM vs AMM on Solana
+## Architecture
 
-### AMM (Automated Market Maker)
-**Examples:** Raydium, Orca, Jupiter
-
-- Formula: `x * y = k` (Constant Product)
-- Liquidity spread uniformly from price 0 to ∞
-- Capital efficiency: Low (~5-10%)
-- Fees: Fixed (typically 0.25-0.3%)
-- Impermanent loss: Higher
-- Complexity: Low
-
-### DLMM (Dynamic Liquidity Market Maker)
-**Examples:** Meteora DLMM
-
-- Formula: Liquidity per BIN (price range)
-- Liquidity concentrated in specific price ranges
-- Capital efficiency: High (~50-100%)
-- Fees: Dynamic (0.01-10% based on volatility)
-- Impermanent loss: Lower
-- Complexity: Higher
-
-### Comparison Table
-
-| Aspect | AMM | DLMM |
-|--------|-----|------|
-| Structure | Constant curve (x*y=k) | Bin/bin-step |
-| Liquidity | Infinite range | Specific range |
-| Capital Efficiency | Low (~5-10%) | High (~50-100%) |
-| Fee | Fixed (0.25%) | Dynamic (0.01-10%) |
-| Impermanent Loss | Higher | Lower |
-| Complexity | Low | High |
-
-### Why DLMM is More Efficient
 ```
-AMM:  $1000 spread across $0-$∞
-      → Effective capital: ~$50
-
-DLMM: $1000 in range $95-$105
-      → Effective capital: ~$500
-
-Efficiency: 10x better!
+┌─────────────────────────────────────────────────┐
+│  Browser                                        │
+│  ├── /app/* → ERP (index.html)                  │
+│  └── /pos/* → POS (pos.html)                    │
+├─────────────────────────────────────────────────┤
+│  Nginx                                          │
+│  ├── /api/* → FastAPI (port 8000)               │
+│  ├── /assets/* → Static files                   │
+│  └── /* → SPA fallback                          │
+├─────────────────────────────────────────────────┤
+│  FastAPI (systemd managed)                      │
+│  ├── pos_router_v2.py                           │
+│  ├── checkout_router.py                         │
+│  ├── inventory_router_v2.py                     │
+│  ├── finance_router_v2.py                       │
+│  └── closing_router.py                          │
+├─────────────────────────────────────────────────┤
+│  PostgreSQL (Docker)                            │
+│  └── Tables: app_user, branch, treatment,       │
+│      product, pos_transaction, etc.             │
+└─────────────────────────────────────────────────┘
 ```
 
-### DLMM Advantages for Bot Trading
-1. Can set specific price ranges (as implemented)
-2. Higher fees during high volatility
-3. Less impermanent loss
-4. Real-time active_bin monitoring possible
+---
+
+## Module Structure (44 sub-modules)
+
+### ERP Modules
+1. **Dashboard** (1) — KPI & monitoring
+2. **Master Data** (12) — Treatments, Products, Branches, Users, Customers, COA, Vouchers, Promos, Categories
+3. **Inventory** (5) — Stock Card, Batches, BOM, Low Stock, Alerts
+4. **Finance** (5) — Journal, Trial Balance, AP, Bank, Assets
+5. **Accounting** (2) — COA Upload, COA Management
+6. **Reporting** (8) — Sales, Treatment, Payment, Therapist, Commission, Inventory, Finance, Shift
+7. **Operations** (12) — Production, Bank Recon, Cost Center, Schedule, Certification, Pricelist, Cancel Reason, Recurring Journal, Cash Flow, WhatsApp, Executive, Settlement
+
+### POS Modules
+8. **POS System** — Home, Kasir, Booking, Checkout, Receipt, Shift, Voucher, Treatment Record
 
 ---
 
-## Solana RPC Technical Details
+## Branch UUIDs
 
-### Fetching Pool Account Data
-```javascript
-// POST to Solana RPC
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "getAccountInfo",
-  "params": ["<pool_address>", {"encoding": "base64"}]
+| Branch | UUID | Code |
+|--------|------|------|
+| HQ | `738401e4-...` | HQ |
+| BSD (Bintaro) | `fbd70198-...` | BSD |
+| DPK (Depok) | `6548cf5b-...` | DPK |
+| CBG (Cibinong) | `8e72d6df-...` | CBG |
+
+---
+
+## Development Workflow
+
+### Step 1: Database Schema
+```python
+from pos_erp.db import execute, fetch_all
+
+execute('''CREATE TABLE IF NOT EXISTS table_name (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    branch_id UUID REFERENCES branch(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+)''')
+```
+
+**CRITICAL**: Check PK types before creating FK! Some tables use UUID, some use SERIAL (INT).
+
+### Step 2: Backend Router
+```python
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+from pos_erp.db import fetch_all, fetch_one, execute, execute_returning
+
+router = APIRouter(prefix="/api/module", tags=["Module"])
+
+class CreateReq(BaseModel):
+    name: str
+    branch_code: str = Field(..., alias="branchCode")
+    model_config = {"populate_by_name": True}
+
+@router.get("")
+def list_items():
+    return {"items": fetch_all("SELECT * FROM table ORDER BY created_at DESC")}
+
+@router.post("")
+def create_item(req: CreateReq):
+    return execute_returning(
+        "INSERT INTO table (name, branch_code) VALUES (%s,%s) RETURNING *",
+        (req.name, req.branch_code)
+    )
+```
+
+### Step 3: Register Router
+```python
+# In fastapi_app.py
+from pos_erp.routers.new_router import router as new_router
+app.include_router(new_router)
+```
+
+### Step 4: Frontend API Client
+```typescript
+// In client.ts
+getItems: () => fetchJSON('/module/items'),
+createItem: (data: any) => fetchJSON('/module/items', { 
+  method: 'POST', body: JSON.stringify(data) 
+}),
+```
+
+### Step 5: Frontend Page
+```tsx
+import { useState, useEffect } from 'react';
+import { fetchJSON } from '../api/client';
+import Icon from '../components/Icon';
+
+export default function ModulePage() {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchJSON('/api/module')
+      .then(res => setData(res.items || []))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div>Loading...</div>;
+  return (
+    <div>
+      <h1><Icon name="master" size={24} /> Module Name</h1>
+      {/* Table/form content */}
+    </div>
+  );
 }
-
-// Decode active_bin from response
-const raw = atob(base64Data);
-const activeBin = raw.charCodeAt(48) | (raw.charCodeAt(49) << 8) |
-                  (raw.charCodeAt(50) << 16) | (raw.charCodeAt(51) << 24);
 ```
 
-### CORS Issues with Local Files
-- Browser blocks Solana RPC requests from `file://` origin
-- **Solution:** Fetch data server-side (VPS), embed in HTML
-- Solana RPC returns `Access-Control-Allow-Origin: backend_traffic` (not `*`)
-- Alternative RPCs (Alchemy) have rate limits (429)
+### Step 6: Build & Deploy
+```bash
+# Kill memory-heavy processes first
+pkill -f tsserver; pkill -f typescript-language-server
+
+# Build frontend
+cd /root/pos-erp-v6/frontend
+NODE_OPTIONS="--max-old-space-size=512" node node_modules/vite/bin/vite.js build --minify false
+
+# Deploy
+cp -r dist/* /var/www/bsn-erp/
+cp -r dist/* /var/www/pos.beautyandshine.com/
+systemctl restart pos-erp
+systemctl reload nginx
+```
 
 ---
 
-## VP Dry-Run Dashboard Files
+## Common Pitfalls & Solutions
 
-| File | Description |
-|------|-------------|
-| `/root/vp-dryrun-compare.html` | Main dashboard with embedded real data |
-| `/root/vp-archive-viz.html` | VP archive visualization |
-| `/root/dry-run-state.json` | Latest dry-run state (5 positions) |
-| `/root/vp-archive-2026-06.json` | VP archive data |
+### 1. CORS Issues with Local Files
+**Problem**: Browser blocks API calls from `file://` origin.
+**Solution**: Embed data server-side in HTML.
 
-### Dashboard Features
-1. **KPI Cards** — 7 metrics: positions, capital, PnL, peak PnL, snapshots, OOR, real data
-2. **Comparison Cards** — Per-pool detail with accuracy gauge & bin visualization
-3. **PnL Timeline Chart** — All 5 positions in 1 chart, different colors
-4. **Bin Comparison Chart** — Visual bar: simulated (purple) vs real (cyan)
-5. **Snapshot History** — Expandable, 10 latest snapshots per position
-6. **Fetch Button** — Solana RPC direct (CORS-safe when embedded)
+### 2. Systemd vs Docker Confusion
+**Problem**: Editing files on host but Docker container has different code.
+**Solution**: Always use `systemctl restart pos-erp` (NOT `docker restart`).
 
----
+### 3. Frontend Date Filter (UTC vs WIB)
+**Problem**: `toISOString()` returns UTC, not local timezone.
+**Solution**:
+```javascript
+const now = new Date();
+const today = now.getFullYear() + '-' + 
+  String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+  String(now.getDate()).padStart(2, '0');
+```
 
-## Position Details
+### 4. In-Memory Cart Lost on Restart
+**Problem**: `_carts` dict resets when server restarts.
+**Solution**: Add DB fallback in checkout endpoints.
 
-### HENRY-SOL
-- Pool: `6eR5rRdexbht8aiiQmYq7yKb7EhdD3af22B4mHDmCp8x`
-- Capital: 0.5 SOL (~$31)
-- Range: [-518, -464], Step: 100
-- Peak PnL: +5.61%
-- OOR: 0 min
-- Snapshots: 33
+### 5. UUID vs String Staff IDs
+**Problem**: Frontend sends username strings, DB expects UUID.
+**Solution**: Resolve before insert:
+```python
+staff_row = fetch_one("SELECT id FROM app_user WHERE username = %s", (req.therapist_id,))
+staff_uuid = staff_row["id"] if staff_row else None
+```
 
-### Magpie-SOL
-- Pool: `J9qgZAYeycmj5Ct9KmC8RfQZZDVzGwf5VfRoN4KNjnME`
-- Capital: 0.5 SOL (~$31)
-- Range: [-566, -516], Step: 80
-- Peak PnL: +3.30%
-- OOR: 0 min
-- Snapshots: 11
+### 6. Service Worker Stale Cache
+**Problem**: Old JS served from cache after deploy.
+**Solution**: Bump `CACHE_NAME` in `sw.js`.
 
-### Bountywork-SOL
-- Pool: `2C1XgnTarjmMNZpup44BL3rjsuWLPgsF3pHjzwRiXthS`
-- Capital: 0.5 SOL (~$31)
-- Range: [-550, -481], Step: 100
-- Peak PnL: +5.67%
-- OOR: 0 min
-- Snapshots: 8
+### 7. Vite Build OOM on Low-Memory VPS
+**Problem**: Build hangs on 961MB RAM server.
+**Solution**: Kill tsserver, use `--minify false`.
 
-### GACHA-SOL
-- Pool: `9bL8Pptpb8M2jEAb63EoarA6Po6Akarpha3JPzQfXGS3`
-- Capital: 0.5 SOL (~$31)
-- Range: [-534, -469], Step: 100
-- Peak PnL: +0.53%
-- OOR: 10 min
-- Snapshots: 7
+### 8. Branch Context Mismatch
+**Problem**: Staff.branch vs pos_branch_id from localStorage diverge.
+**Solution**: Always send `pos_branch_id` from localStorage.
 
-### three-SOL
-- Pool: `8eDUNVrNUZ87SLYeihLTM7hJhckdAKqua6hPztuD57pX`
-- Capital: 0.5 SOL (~$31)
-- Range: [-344, -297], Step: 80
-- Peak PnL: 0%
-- OOR: 0 min
-- Snapshots: 2
+### 9. Document Registry FK Violation
+**Problem**: Insert into dependent table before registering doc_key.
+**Solution**: Register in `document_registry` FIRST.
+
+### 10. Pydantic Alias for camelCase
+**Problem**: Frontend sends camelCase, backend expects snake_case.
+**Solution**:
+```python
+class Request(BaseModel):
+    branch_code: str = Field(..., alias="branchCode")
+    model_config = {"populate_by_name": True}
+```
 
 ---
 
-## Recommendations for Production
+## Key File Locations
 
-1. **Update bin ranges in real-time** — Current ranges are static
-2. **Add tolerance threshold** — Alert if diff > ±10 bins
-3. **Monitor OOR positions** — GACHA-SOL had 10 min OOR
-4. **Consider pool recycling** — Verify pool address before trading
-5. **Use DLMM advantages** — Dynamic fees, concentrated liquidity
+| File | Purpose |
+|------|---------|
+| `src/pos_erp/fastapi_app.py` | Main app, router registration |
+| `src/pos_erp/routers/pos_router_v2.py` | POS transactions |
+| `src/pos_erp/routers/checkout_router.py` | Checkout flow |
+| `src/pos_erp/db.py` | PostgreSQL connection |
+| `frontend/src/api/client.ts` | API client |
+| `frontend/src/components/Icon.tsx` | SVG icon component |
+| `frontend/src/components/Layout.tsx` | ERP sidebar layout |
+| `frontend/src/components/PosLayout.tsx` | POS layout |
+| `/etc/systemd/system/pos-erp.service` | Systemd service |
+| `/etc/nginx/sites-enabled/` | Nginx configs |
 
 ---
 
-## Technical Notes
+## Database Tables
 
-### Meteora DLMM API
-- Endpoint: `https://dlmm-api.meteora.ag/pair/{address}`
-- Returns 404 for some pools (may be rate limited or deprecated)
-- CORS blocked from local files
+| Table | PK Type | Description |
+|-------|---------|-------------|
+| `app_user` | UUID | Staff accounts |
+| `branch` | UUID | Branch locations |
+| `treatment` | UUID | Services/treatments |
+| `product` | UUID | Products |
+| `pos_transaction` | UUID | POS transactions |
+| `pos_transaction_item` | UUID | Transaction line items |
+| `pos_daily_closing` | UUID | Daily closing records |
+| `document_registry` | TEXT | Document key tracking |
+| `chart_of_account` | UUID | Chart of accounts |
+| `journal_entry` | UUID | Journal entries |
 
-### Solana RPC
-- Mainnet: `https://api.mainnet-beta.solana.com`
-- CORS: `Access-Control-Allow-Origin: backend_traffic` (not `*`)
-- Works from server-side, blocked from local `file://`
-- Pool account size: 904 bytes
+---
 
-### Data Freshness
-- Real data fetched: 2026-06-07T08:22:00Z
-- Last snapshot: 2026-06-07T06:20:01.861Z
-- SOL price at last snapshot: $64.42
+## Deployment Checklist
+
+1. ✅ Database schema created
+2. ✅ Backend router registered
+3. ✅ Frontend page created
+4. ✅ API methods added to client.ts
+5. ✅ Routes added to App.tsx/PosApp.tsx
+6. ✅ Navigation added to Layout.tsx
+7. ✅ Build frontend (vite build)
+8. ✅ Copy dist to nginx roots
+9. ✅ Restart backend (systemd)
+10. ✅ Reload nginx
+11. ✅ Verify health endpoint
+
+---
+
+## References
+
+- `pos-erp-v6-development` — Full development workflow
+- `pos-beauty-shine` — Deployment & debugging
+- `domain-driven-fastapi-erp` — Architecture patterns
+- `pos-erp-module-development` — Adding new modules
