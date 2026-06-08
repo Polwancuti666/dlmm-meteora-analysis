@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VP Dry-Run — Simulated vs Real Comparison</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#06060f;color:#c8c8e0;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+.wrap{max-width:1200px;margin:0 auto;padding:24px}
+h1{font-size:22px;font-weight:700;background:linear-gradient(135deg,#00d4ff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:2px}
+.sub{color:#555;font-size:11px;margin-bottom:20px}
+
+/* Info banner */
+.banner{background:#12122a;border:1px solid #1e1e3a;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;gap:10px;align-items:flex-start}
+.banner-icon{font-size:18px;flex-shrink:0}
+.banner h3{font-size:13px;color:#fff;margin-bottom:3px}
+.banner p{font-size:11px;color:#888;line-height:1.5}
+.banner code{background:#ffffff10;padding:1px 5px;border-radius:3px;font-size:10px;color:#00d4ff}
+
+/* Fetch bar */
+.fetch-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+.fetch-btn{background:linear-gradient(135deg,#51cf66,#00d4ff);color:#000;border:none;padding:10px 20px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.03em}
+.fetch-btn:hover{transform:translateY(-1px);box-shadow:0 4px 15px #51cf6640}
+.fetch-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.fetch-status{font-size:11px;color:#666}
+
+/* KPI */
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px}
+.k{background:#12122a;border:1px solid #1e1e3a;border-radius:10px;padding:14px;position:relative;overflow:hidden}
+.k::after{content:'';position:absolute;top:0;left:0;width:3px;height:100%}
+.k.c::after{background:#00d4ff}.k.g::after{background:#51cf66}.k.r::after{background:#ff4757}.k.y::after{background:#fcc419}.k.p::after{background:#a855f7}.k.o::after{background:#ff922b}.k.w::after{background:#fff}
+.k-l{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#666;margin-bottom:4px}
+.k-v{font-size:18px;font-weight:700;font-family:'Courier New',monospace}
+.k-s{font-size:9px;color:#555;margin-top:2px}
+
+/* Comparison cards */
+.compare-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-bottom:24px}
+.compare-card{background:#12122a;border:1px solid #1e1e3a;border-radius:14px;padding:18px;position:relative;overflow:hidden}
+.compare-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.compare-card.match::before{background:linear-gradient(90deg,#51cf66,#00d4ff)}
+.compare-card.deviation::before{background:linear-gradient(90deg,#fcc419,#ff922b)}
+.compare-card.big-dev::before{background:linear-gradient(90deg,#ff4757,#cc5de8)}
+.compare-card.no-data::before{background:linear-gradient(90deg,#555,#333)}
+.c-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.c-name{font-size:16px;font-weight:700;color:#fff}
+.c-badge{font-size:9px;padding:3px 10px;border-radius:10px;font-weight:600;text-transform:uppercase}
+.c-row{display:flex;justify-content:space-between;padding:5px 0;font-size:11px;border-bottom:1px solid #ffffff06}
+.c-row:last-child{border:none}
+.c-l{color:#888}.c-v{font-family:'Courier New',monospace;font-weight:500}
+.c-v.g{color:#51cf66}.c-v.r{color:#ff4757}.c-v.c{color:#00d4ff}.c-v.y{color:#fcc419}.c-v.p{color:#a855f7}.c-v.o{color:#ff922b}
+
+/* Accuracy gauge */
+.gauge{margin-top:12px}
+.gauge-label{display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px}
+.gauge-track{height:8px;background:#1e1e3a;border-radius:4px;overflow:hidden}
+.gauge-fill{height:100%;border-radius:4px;transition:width .5s ease-out}
+
+/* Bin visualization */
+.bin-viz{margin-top:12px}
+.bin-track{height:20px;background:#1e1e3a;border-radius:10px;position:relative;overflow:visible;margin:0 8px}
+.bin-range{position:absolute;height:100%;background:#ffffff08;border-radius:10px}
+.bin-marker{position:absolute;top:-2px;width:4px;height:24px;border-radius:2px;z-index:2;transition:left .3s}
+.bin-labels{display:flex;justify-content:space-between;font-size:8px;color:#555;margin-top:3px;padding:0 8px}
+
+/* Diff badge */
+.diff{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;margin-left:6px}
+.diff.ok{background:#51cf6620;color:#51cf66}
+.diff.warn{background:#fcc41920;color:#fcc419}
+.diff.err{background:#ff475720;color:#ff4757}
+
+/* Chart */
+.chart-wrap{background:#12122a;border:1px solid #1e1e3a;border-radius:14px;padding:18px;margin-bottom:24px}
+.chart-title{font-size:14px;font-weight:600;color:#fff;margin-bottom:3px}
+.chart-desc{font-size:10px;color:#666;margin-bottom:12px}
+svg.full{width:100%;height:220px}
+
+/* Snapshot sections */
+.snap-section{background:#12122a;border:1px solid #1e1e3a;border-radius:12px;padding:16px;margin-bottom:14px}
+.snap-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
+.snap-head h3{font-size:13px;color:#fff}
+.snap-head .arrow{color:#666;transition:transform .2s;font-size:12px}
+.snap-head.open .arrow{transform:rotate(90deg)}
+.snap-body{max-height:0;overflow:hidden;transition:max-height .3s ease-out}
+.snap-body.open{max-height:600px;overflow-y:auto}
+.snap-tbl{width:100%;border-collapse:collapse;font-size:10px;margin-top:10px}
+.snap-tbl th{text-align:left;padding:6px 10px;background:#0a0a18;color:#666;font-size:8px;text-transform:uppercase}
+.snap-tbl td{padding:5px 10px;border-bottom:1px solid #ffffff05;font-family:'Courier New',monospace;color:#bbb}
+
+/* Footer */
+.footer{text-align:center;padding:20px 0;font-size:10px;color:#333}
+
+@media(max-width:768px){.compare-grid{grid-template-columns:1fr}.kpi{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🔬 VP Dry-Run — Simulated vs Real</h1>
+<p class="sub">Virtual Position dry-run comparison with on-chain Solana data • Last fetched: <span id="fetchTime">—</span></p>
+
+<div class="banner">
+  <div class="banner-icon">ℹ️</div>
+  <div>
+    <h3>Cara Kerja Perbandingan</h3>
+    <p>
+      <strong>Simulated</strong> = data dari dry-run bot (paper trading, tidak ada TX on-chain)<br>
+      <strong>Real</strong> = data dari Solana RPC (<code>getAccountInfo</code> → decode pool account, offset 48 = active_bin)<br>
+      <strong>Bin Diff</strong> = selisih simulated vs real bin. Kecil = akurat, besar = deviasi.
+    </p>
+  </div>
+</div>
+
+<div class="fetch-bar">
+  <button class="fetch-btn" id="fetchBtn" onclick="fetchRealData()">🔗 Fetch Real Pool Data from Solana</button>
+  <span class="fetch-status" id="fetchStatus" style="color:#51cf66">✅ 5 pools data embedded (Solana RPC)</span>
+</div>
+
+<div class="kpi" id="kpi"></div>
+
+<h2 style="font-size:16px;color:#fff;margin:20px 0 12px">📊 Comparison Results</h2>
+<div class="compare-grid" id="compareGrid"></div>
+
+<h2 style="font-size:16px;color:#fff;margin:20px 0 12px">📈 PnL Timeline — All Positions</h2>
+<div class="chart-wrap">
+  <div class="chart-title">PnL % Over Time</div>
+  <div class="chart-desc">Each line = one position. Shows PnL% from snapshots over time.</div>
+  <svg class="full" id="pnlChart" viewBox="0 0 1200 220"></svg>
+</div>
+
+<h2 style="font-size:16px;color:#fff;margin:20px 0 12px">📊 Active Bin Comparison</h2>
+<div class="chart-wrap">
+  <div class="chart-title">Simulated Bin vs Real Bin (On-Chain)</div>
+  <div class="chart-desc">Purple = Simulated bin, Cyan = Real bin. Closer = more accurate.</div>
+  <svg class="full" id="binChart" viewBox="0 0 1200 220"></svg>
+</div>
+
+<h2 style="font-size:16px;color:#fff;margin:20px 0 12px">📋 Snapshot History</h2>
+<div id="snapSections"></div>
+
+<div class="footer">VP Dry-Run Dashboard • Data: dry-run-state.json + Solana RPC • <span id="footerTime"></span></div>
+
+</div>
+
+<script>
+// Embedded data from dry-run-state.json
+const SIM_DATA = {"virtual_positions":[{"id":"vp-20260607T005112Z","pool":"6eR5rRdexbht8aiiQmYq7yKb7EhdD3af22B4mHDmCp8x","pool_name":"HENRY-SOL","pair":"HENRY-SOL","status":"open","deployed_at":"2026-06-07T00:51:12.033Z","closed_at":null,"strategy":"spot","bins_below":54,"lower_bin":-518,"upper_bin":-464,"active_bin_at_deploy":-464,"bin_step":100,"amount_sol":0.5,"initial_value_usd":31.109327823441596,"sol_price_at_deploy":62.21865564688319,"deploy_rationale":null,"base_mint":"HfAFNsnjmbWMMRkwNeUUoHJ8V6UnUGFzkpu3Seajpump","volatility":2.8493,"fee_tvl_ratio":0.0523,"organic_score":72,"deploy_gas_sol":5e-06,"close_gas_sol":5e-06,"gas_priority_fee":0,"gas_cost_sol":1e-05,"last_sync_at":"2026-06-07T06:20:01.849Z","_oor_since":null,"_oor_minutes":0,"_peak_pnl_pct":5.60673915666324,"_peak_pnl_sol_pct":1.9919873999999949,"_trailing_active":false,"_trailing_pending":false,"_trailing_pending_since":null,"snapshots":[{"at":"2026-06-07T01:00:01.935Z","pnl_pct":-0.5016463750126808,"pnl_sol_pct":-0.2894684000000036,"value_usd":30.95326900812449,"value_sol":0.49693779299999996,"unclaimed_fees_usd":0.10026092520963946,"sol_price":62.08625811423212,"active_bin":-474,"oor_minutes":0},{"at":"2026-06-07T01:10:01.231Z","pnl_pct":1.0462385183623741,"pnl_sol_pct":-0.25909880000000163,"value_usd":31.434805593934065,"value_sol":0.497088859,"unclaimed_fees_usd":0.10183896223593134,"sol_price":63.032928749863885,"active_bin":-474,"oor_minutes":0},{"at":"2026-06-07T01:20:01.503Z","pnl_pct":1.6196933140911234,"pnl_sol_pct":-0.2632644000000073,"value_usd":31.61320352625657,"value_sol":0.49673676199999994,"unclaimed_fees_usd":0.1234214281954609,"sol_price":63.39329904087331,"active_bin":-476,"oor_minutes":0},{"at":"2026-06-07T01:30:01.303Z","pnl_pct":2.2052410294213973,"pnl_sol_pct":-0.1983858000000005,"value_usd":31.795363484581337,"value_sol":0.496208928,"unclaimed_fees_usd":0.17835336601263402,"sol_price":63.717132712631695,"active_bin":-479,"oor_minutes":0},{"at":"2026-06-07T01:40:01.932Z","pnl_pct":2.1813787339003348,"pnl_sol_pct":-0.01019759999999481,"value_usd":31.78794008484149,"value_sol":0.496620636,"unclaimed_fees_usd":0.21162601451010443,"sol_price":63.58236404483881,"active_bin":-476,"oor_minutes":0},{"at":"2026-06-07T01:50:01.892Z","pnl_pct":2.309072589906473,"pnl_sol_pct":0.05479340000000832,"value_usd":31.827664785116834,"value_sol":0.496870733,"unclaimed_fees_usd":0.21651534575516362,"sol_price":63.62046975176071,"active_bin":-475,"oor_minutes":0},{"at":"2026-06-07T02:00:01.685Z","pnl_pct":2.556900747311404,"pnl_sol_pct":0.2598584000000015,"value_usd":31.90476245904273,"value_sol":0.497283917,"unclaimed_fees_usd":0.25555508975061286,"sol_price":63.64414027347704,"active_bin":-471,"oor_minutes":0},{"at":"2026-06-07T02:10:02.491Z","pnl_pct":2.818769924965387,"pnl_sol_pct":0.3886657999999876,"value_usd":31.986228199987657,"value_sol":0.497145299,"unclaimed_fees_usd":0.3057534060590868,"sol_price":63.72477997409078,"active_bin":-472,"oor_minutes":0},{"at":"2026-06-07T02:20:01.631Z","pnl_pct":2.212359712436679,"pnl_sol_pct":0.3552783999999809,"value_usd":31.797578059017273,"value_sol":0.49614131599999994,"unclaimed_fees_usd":0.35709485706233635,"sol_price":63.37001613861753,"active_bin":-477,"oor_minutes":0},{"at":"2026-06-07T02:30:01.185Z","pnl_pct":1.7854478438364283,"pnl_sol_pct":0.202727200000008,"value_usd":31.66476864629724,"value_sol":0.495311944,"unclaimed_fees_usd":0.36035497858673815,"sol_price":63.20141084203393,"active_bin":-477,"oor_minutes":0},{"at":"2026-06-07T02:40:01.892Z","pnl_pct":1.8548946420447923,"pnl_sol_pct":0.202727200000008,"value_usd":31.686373078414764,"value_sol":0.495311944,"unclaimed_fees_usd":0.36060084378664065,"sol_price":63.24453228737024,"active_bin":-477,"oor_minutes":0},{"at":"2026-06-07T02:50:01.710Z","pnl_pct":2.663189498795121,"pnl_sol_pct":0.5091736000000013,"value_usd":31.93782817518124,"value_sol":0.496507637,"unclaimed_fees_usd":0.3837420550835228,"sol_price":63.552066007995194,"active_bin":-476,"oor_minutes":0},{"at":"2026-06-07T03:00:01.528Z","pnl_pct":2.66509385042581,"pnl_sol_pct":0.5668113999999891,"value_usd":31.938420606172944,"value_sol":0.49666048999999995,"unclaimed_fees_usd":0.3921253477991633,"sol_price":63.51682063208568,"active_bin":-475,"oor_minutes":0},{"at":"2026-06-07T03:10:02.067Z","pnl_pct":2.8974755815784294,"pnl_sol_pct":0.7155040000000001,"value_usd":32.010713000719,"value_sol":0.497028944,"unclaimed_fees_usd":0.4162707400032401,"sol_price":63.566604404261334,"active_bin":-473,"oor_minutes":0},{"at":"2026-06-07T03:20:02.438Z","pnl_pct":3.4984150273893557,"pnl_sol_pct":0.7077863999999989,"value_usd":32.197661222936695,"value_sol":0.496990356,"unclaimed_fees_usd":0.4187339213339197,"sol_price":63.94274439724295,"active_bin":-473,"oor_minutes":0},{"at":"2026-06-07T03:30:00.996Z","pnl_pct":3.604714736910692,"pnl_sol_pct":0.7129382000000017,"value_usd":32.230730348047054,"value_sol":0.497016115,"unclaimed_fees_usd":0.41914254710859505,"sol_price":64.00514357756481,"active_bin":-473,"oor_minutes":0},{"at":"2026-06-07T03:40:01.580Z","pnl_pct":3.1045983470088254,"pnl_sol_pct":0.743025399999997,"value_usd":32.07514750081372,"value_sol":0.496485709,"unclaimed_fees_usd":0.4603487889595138,"sol_price":63.677157547054804,"active_bin":-476,"oor_minutes":0},{"at":"2026-06-07T03:50:01.615Z","pnl_pct":3.0318850809831313,"pnl_sol_pct":0.7206207999999936,"value_usd":32.052526892514656,"value_sol":0.495791278,"unclaimed_fees_usd":0.4971946379120118,"sol_price":63.64640455535131,"active_bin":-479,"oor_minutes":0},{"at":"2026-06-07T04:00:01.450Z","pnl_pct":3.076007786639757,"pnl_sol_pct":0.5226179999999969,"value_usd":32.06625316966195,"value_sol":0.49463033199999995,"unclaimed_fees_usd":0.5092926231191955,"sol_price":63.79908085892063,"active_bin":-480,"oor_minutes":0},{"at":"2026-06-07T04:10:02.012Z","pnl_pct":2.727343314539566,"pnl_sol_pct":0.5226179999999969,"value_usd":31.957785996032428,"value_sol":0.49463033199999995,"unclaimed_fees_usd":0.5075698920259236,"sol_price":63.583274355294705,"active_bin":-480,"oor_minutes":0},{"at":"2026-06-07T04:20:02.249Z","pnl_pct":3.6036113327265253,"pnl_sol_pct":1.3701446000000006,"value_usd":32.23038708642218,"value_sol":0.496499417,"unclaimed_fees_usd":0.6582344348949551,"sol_price":63.589505990350894,"active_bin":-470,"oor_minutes":0},{"at":"2026-06-07T04:30:01.906Z","pnl_pct":3.2902758948289192,"pnl_sol_pct":1.4403893999999973,"value_usd":32.1329105378596,"value_sol":0.496850641,"unclaimed_fees_usd":0.6557892603042577,"sol_price":63.353287044577534,"active_bin":-470,"oor_minutes":0},{"at":"2026-06-07T04:40:01.363Z","pnl_pct":4.5450089218473595,"pnl_sol_pct":1.8228670000000058,"value_usd":32.52324954854376,"value_sol":0.497920519,"unclaimed_fees_usd":0.7150835208136144,"sol_price":63.8820149280294,"active_bin":-468,"oor_minutes":0},{"at":"2026-06-07T04:50:01.475Z","pnl_pct":4.751067863531421,"pnl_sol_pct":1.8491771999999962,"value_usd":32.58735310022177,"value_sol":0.497650575,"unclaimed_fees_usd":0.742000091217007,"sol_price":63.99139197016855,"active_bin":-470,"oor_minutes":0},{"at":"2026-06-07T05:00:01.493Z","pnl_pct":4.861073630160739,"pnl_sol_pct":1.8517724000000069,"value_usd":32.62157515478717,"value_sol":0.496182048,"unclaimed_fees_usd":0.8376609667838693,"sol_price":64.05696118212504,"active_bin":-477,"oor_minutes":0},{"at":"2026-06-07T05:10:01.776Z","pnl_pct":4.650674941799669,"pnl_sol_pct":1.8147905999999825,"value_usd":32.55612153708871,"value_sol":0.49585552899999996,"unclaimed_fees_usd":0.8453400841601697,"sol_price":63.95165446048407,"active_bin":-478,"oor_minutes":0},{"at":"2026-06-07T05:20:02.037Z","pnl_pct":5.533693070061604,"pnl_sol_pct":1.981250000000001,"value_usd":32.83082254135013,"value_sol":0.496546208,"unclaimed_fees_usd":0.8601996309066313,"sol_price":64.38599750709102,"active_bin":-477,"oor_minutes":0},{"at":"2026-06-07T05:30:01.830Z","pnl_pct":5.211486444033891,"pnl_sol_pct":1.9802917999999892,"value_usd":32.73058622579032,"value_sol":0.496541417,"unclaimed_fees_usd":0.8575813991957615,"sol_price":64.19002269571918,"active_bin":-477,"oor_minutes":0},{"at":"2026-06-07T05:40:02.222Z","pnl_pct":5.299748630580156,"pnl_sol_pct":1.8094617999999896,"value_usd":32.758043998747134,"value_sol":0.495552202,"unclaimed_fees_usd":0.8684326604971807,"sol_price":64.35166912697919,"active_bin":-477,"oor_minutes":0},{"at":"2026-06-07T05:50:02.380Z","pnl_pct":5.097205375932388,"pnl_sol_pct":1.8092927999999953,"value_usd":32.69503415367449,"value_sol":0.49555135699999997,"unclaimed_fees_usd":0.8667636757663278,"sol_price":64.22799580368854,"active_bin":-477,"oor_minutes":0},{"at":"2026-06-07T06:00:01.302Z","pnl_pct":5.3130958471819385,"pnl_sol_pct":1.9879079999999938,"value_usd":32.76219622811509,"value_sol":0.496444423,"unclaimed_fees_usd":0.8670237088800208,"sol_price":64.24721689185954,"active_bin":-478,"oor_minutes":0},{"at":"2026-06-07T06:10:01.642Z","pnl_pct":5.097688071830911,"pnl_sol_pct":1.9878228000000053,"value_usd":32.69518431712395,"value_sol":0.496443997,"unclaimed_fees_usd":0.8652510183718773,"sol_price":64.1158589712025,"active_bin":-478,"oor_minutes":0},{"at":"2026-06-07T06:20:01.849Z","pnl_pct":5.60673915666324,"pnl_sol_pct":1.9919873999999949,"value_usd":32.85354668789323,"value_sol":0.496449787,"unclaimed_fees_usd":0.8703749286592307,"sol_price":64.42377979957519,"active_bin":-478,"oor_minutes":0}],"close_reason":null,"close_pnl_usd":null,"close_pnl_pct":null},{"id":"vp-20260607T043132Z","pool":"J9qgZAYeycmj5Ct9KmC8RfQZZDVzGwf5VfRoN4KNjnME","pool_name":"Magpie-SOL","pair":"Magpie-SOL","status":"open","deployed_at":"2026-06-07T04:31:32.628Z","closed_at":null,"strategy":"spot","bins_below":50,"lower_bin":-566,"upper_bin":-516,"active_bin_at_deploy":-516,"bin_step":80,"amount_sol":0.5,"initial_value_usd":31.72957228945478,"sol_price_at_deploy":63.45914457890956,"deploy_rationale":null,"base_mint":"9UuLsJ3jf8ViBNeRcwXD53re5G3ypgfKK3s2EiMMpump","volatility":2.1381,"fee_tvl_ratio":0.2404,"organic_score":79,"deploy_gas_sol":5e-06,"close_gas_sol":5e-06,"gas_priority_fee":0,"gas_cost_sol":1e-05,"last_sync_at":"2026-06-07T06:20:01.851Z","_oor_since":null,"_oor_minutes":0,"_peak_pnl_pct":3.2973979457743683,"_peak_pnl_sol_pct":1.7506971999999843,"_trailing_active":false,"_trailing_pending":false,"_trailing_pending_since":null,"snapshots":[{"at":"2026-06-07T04:40:01.369Z","pnl_pct":0.38680351222455633,"pnl_sol_pct":-0.2777122000000021,"value_usd":31.85230338948422,"value_sol":0.498503631,"unclaimed_fees_usd":0.006886992265360993,"sol_price":63.8820149280294,"active_bin":-516,"oor_minutes":0},{"at":"2026-06-07T04:50:01.671Z","pnl_pct":0.5162725078157872,"pnl_sol_pct":-0.319769999999997,"value_usd":31.89338334803277,"value_sol":0.497119812,"unclaimed_fees_usd":0.08199460220427182,"sol_price":63.99139197016855,"active_bin":-523,"oor_minutes":0},{"at":"2026-06-07T05:00:01.495Z","pnl_pct":0.5944477560247934,"pnl_sol_pct":-0.3443578000000058,"value_usd":31.918188019925708,"value_sol":0.494745412,"unclaimed_fees_usd":0.22630036840725015,"sol_price":64.05696118212504,"active_bin":-530,"oor_minutes":0},{"at":"2026-06-07T05:10:01.778Z","pnl_pct":0.6836578881169675,"pnl_sol_pct":-0.09173559999999803,"value_usd":31.946494013277412,"value_sol":0.495866556,"unclaimed_fees_usd":0.2350073654551352,"sol_price":63.95165446048407,"active_bin":-530,"oor_minutes":0},{"at":"2026-06-07T05:20:02.039Z","pnl_pct":1.7288324027965727,"pnl_sol_pct":0.2644198000000042,"value_usd":32.278123416463636,"value_sol":0.49658737399999997,"unclaimed_fees_usd":0.30484999204676155,"sol_price":64.38599750709102,"active_bin":-526,"oor_minutes":0},{"at":"2026-06-07T05:30:01.832Z","pnl_pct":1.9294121896931355,"pnl_sol_pct":0.7688271999999996,"value_usd":32.341766524945015,"value_sol":0.49565477799999996,"unclaimed_fees_usd":0.5256750758833695,"sol_price":64.19002269571918,"active_bin":-530,"oor_minutes":0},{"at":"2026-06-07T05:40:02.224Z","pnl_pct":2.3617928110280673,"pnl_sol_pct":0.9420874000000135,"value_usd":32.478959046757076,"value_sol":0.49586898100000004,"unclaimed_fees_usd":0.5689624511127449,"sol_price":64.35166912697919,"active_bin":-529,"oor_minutes":0},{"at":"2026-06-07T05:50:02.382Z","pnl_pct":2.1430061600370554,"pnl_sol_pct":0.9202874000000083,"value_usd":32.409538978171206,"value_sol":0.4954285,"unclaimed_fees_usd":0.5891593591434994,"sol_price":64.22799580368854,"active_bin":-531,"oor_minutes":0},{"at":"2026-06-07T06:00:01.304Z","pnl_pct":2.3255858401255396,"pnl_sol_pct":1.0704347999999975,"value_usd":32.46747072975074,"value_sol":0.49549581499999995,"unclaimed_fees_usd":0.6332436344370318,"sol_price":64.24721689185954,"active_bin":-531,"oor_minutes":0},{"at":"2026-06-07T06:10:01.644Z","pnl_pct":2.121978237242995,"pnl_sol_pct":1.0759815999999978,"value_usd":32.402866908207294,"value_sol":0.495263035,"unclaimed_fees_usd":0.6486520024975664,"sol_price":64.1158589712025,"active_bin":-532,"oor_minutes":0},{"at":"2026-06-07T06:20:01.851Z","pnl_pct":3.2973979457743683,"pnl_sol_pct":1.7506971999999843,"value_usd":32.775822554330254,"value_sol":0.49609464799999997,"unclaimed_fees_usd":0.8155301918304948,"sol_price":64.42377979957519,"active_bin":-526,"oor_minutes":0}],"close_reason":null,"close_pnl_usd":null,"close_pnl_pct":null},{"id":"vp-20260607T050256Z","pool":"2C1XgnTarjmMNZpup44BL3rjsuWLPgsF3pHjzwRiXthS","pool_name":"Bountywork-SOL","pair":"Bountywork-SOL","status":"open","deployed_at":"2026-06-07T05:02:56.093Z","closed_at":null,"strategy":"spot","bins_below":69,"lower_bin":-550,"upper_bin":-481,"active_bin_at_deploy":-481,"bin_step":100,"amount_sol":0.5,"initial_value_usd":31.984664376659612,"sol_price_at_deploy":63.969328753319225,"deploy_rationale":null,"base_mint":"J4x1EMmQjF6WEzXq2tUtzY89x5aMhYz5CzfevcJEpump","volatility":6.6425,"fee_tvl_ratio":3.5823,"organic_score":78,"deploy_gas_sol":5e-06,"close_gas_sol":5e-06,"gas_priority_fee":0,"gas_cost_sol":1e-05,"last_sync_at":"2026-06-07T06:20:01.854Z","_oor_since":null,"_oor_minutes":0,"_peak_pnl_pct":5.6721071995216485,"_peak_pnl_sol_pct":4.926686799999991,"_trailing_active":false,"_trailing_pending":false,"_trailing_pending_since":null,"snapshots":[{"at":"2026-06-07T05:10:01.781Z","pnl_pct":-0.0053766735389187735,"pnl_sol_pct":0.022258799999996803,"value_usd":31.98294466567356,"value_sol":0.499252509,"unclaimed_fees_usd":0.05492072157584681,"sol_price":63.95165446048407,"active_bin":-482,"oor_minutes":0},{"at":"2026-06-07T05:20:02.044Z","pnl_pct":1.2300315276553473,"pnl_sol_pct":0.574929600000007,"value_usd":32.378085832507274,"value_sol":0.496089181,"unclaimed_fees_usd":0.4368890613464484,"sol_price":64.38599750709102,"active_bin":-495,"oor_minutes":0},{"at":"2026-06-07T05:30:01.835Z","pnl_pct":1.652394421393056,"pnl_sol_pct":1.3028998000000014,"value_usd":32.51317718652083,"value_sol":0.49552370399999995,"unclaimed_fees_usd":0.7054993804939969,"sol_price":64.19002269571918,"active_bin":-498,"oor_minutes":0},{"at":"2026-06-07T05:40:02.227Z","pnl_pct":2.0542649773780504,"pnl_sol_pct":1.4479176000000038,"value_usd":32.641714135081244,"value_sol":0.495587294,"unclaimed_fees_usd":0.7498445680582849,"sol_price":64.35166912697919,"active_bin":-498,"oor_minutes":0},{"at":"2026-06-07T05:50:02.385Z","pnl_pct":2.3091388116717733,"pnl_sol_pct":1.897106599999998,"value_usd":32.723234675564015,"value_sol":0.49449844899999995,"unclaimed_fees_usd":0.9625903682615277,"sol_price":64.22799580368854,"active_bin":-503,"oor_minutes":0},{"at":"2026-06-07T06:00:01.307Z","pnl_pct":2.683725761752916,"pnl_sol_pct":2.2395884000000033,"value_usd":32.843045054346234,"value_sol":0.493206006,"unclaimed_fees_usd":1.1559318144964557,"sol_price":64.24721689185954,"active_bin":-509,"oor_minutes":0},{"at":"2026-06-07T06:10:01.649Z","pnl_pct":3.0280754966572125,"pnl_sol_pct":2.792615399999998,"value_usd":32.95318416133729,"value_sol":0.494233534,"unclaimed_fees_usd":1.2649765965542754,"sol_price":64.1158589712025,"active_bin":-504,"oor_minutes":0},{"at":"2026-06-07T06:20:01.854Z","pnl_pct":5.6721071995216485,"pnl_sol_pct":4.926686799999991,"value_usd":33.79886882751096,"value_sol":0.497426119,"unclaimed_fees_usd":1.7527980704976789,"sol_price":64.42377979957519,"active_bin":-489,"oor_minutes":0}],"close_reason":null,"close_pnl_usd":null,"close_pnl_pct":null},{"id":"vp-20260607T051139Z","pool":"9bL8Pptpb8M2jEAb63EoarA6Po6Akarpha3JPzQfXGS3","pool_name":"GACHA-SOL","pair":"GACHA-SOL","status":"open","deployed_at":"2026-06-07T05:11:39.161Z","closed_at":null,"strategy":"spot","bins_below":65,"lower_bin":-534,"upper_bin":-469,"active_bin_at_deploy":-469,"bin_step":100,"amount_sol":0.5,"initial_value_usd":31.94756562161744,"sol_price_at_deploy":63.89513124323488,"deploy_rationale":null,"base_mint":"DnnmrZnCTqQn7bYbVAiWdJLreqrhg7HaSTkmhtzu8THy","volatility":4.3786,"fee_tvl_ratio":0.2391,"organic_score":72,"deploy_gas_sol":5e-06,"close_gas_sol":5e-06,"gas_priority_fee":0,"gas_cost_sol":1e-05,"last_sync_at":"2026-06-07T06:20:01.856Z","_oor_since":"2026-06-07T06:10:01.651Z","_oor_minutes":10,"_peak_pnl_pct":0.534931390287124,"_peak_pnl_sol_pct":0,"_trailing_active":false,"_trailing_pending":false,"_trailing_pending_since":null,"snapshots":[{"at":"2026-06-07T05:20:02.046Z","pnl_pct":0.22904928682908704,"pnl_sol_pct":-0.5350774000000058,"value_usd":32.02074129283301,"value_sol":0.497275547,"unclaimed_fees_usd":0.003159163353682928,"sol_price":64.38599750709102,"active_bin":-469,"oor_minutes":0},{"at":"2026-06-07T05:30:01.839Z","pnl_pct":0.06940653263612653,"pnl_sol_pct":-0.390316199999996,"value_usd":31.969739319177055,"value_sol":0.497268759,"unclaimed_fees_usd":0.05004639309494442,"sol_price":64.19002269571918,"active_bin":-471,"oor_minutes":0},{"at":"2026-06-07T05:40:02.232Z","pnl_pct":0.35163663772933557,"pnl_sol_pct":-0.36030020000000773,"value_usd":32.05990496720567,"value_sol":0.49719237299999997,"unclaimed_fees_usd":0.06474588745205107,"sol_price":64.35166912697919,"active_bin":-473,"oor_minutes":0},{"at":"2026-06-07T05:50:02.387Z","pnl_pct":0.16012649052583033,"pnl_sol_pct":-0.3589579999999981,"value_usd":31.998722137255772,"value_sol":0.497193592,"unclaimed_fees_usd":0.06497419665893579,"sol_price":64.22799580368854,"active_bin":-473,"oor_minutes":0},{"at":"2026-06-07T06:00:01.309Z","pnl_pct":0.2919223498084995,"pnl_sol_pct":-0.2576944000000081,"value_usd":32.04082770588668,"value_sol":0.497413817,"unclaimed_fees_usd":0.08337432007995194,"sol_price":64.24721689185954,"active_bin":-470,"oor_minutes":0},{"at":"2026-06-07T06:10:01.651Z","pnl_pct":0.05858213243048423,"pnl_sol_pct":-0.2858834000000088,"value_usd":31.96628118681821,"value_sol":0.497206852,"unclaimed_fees_usd":0.08743678447065695,"sol_price":64.1158589712025,"active_bin":-466,"oor_minutes":0},{"at":"2026-06-07T06:20:01.856Z","pnl_pct":0.534931390287124,"pnl_sol_pct":-0.29003800000000357,"value_usd":32.11846317856005,"value_sol":0.497186079,"unclaimed_fees_usd":0.08785670564985447,"sol_price":64.42377979957519,"active_bin":-465,"oor_minutes":10}],"close_reason":null,"close_pnl_usd":null,"close_pnl_pct":null},{"id":"vp-20260607T060148Z","pool":"8eDUNVrNUZ87SLYeihLTM7hJhckdAKqua6hPztuD57pX","pool_name":"three-SOL","pair":"three-SOL","status":"open","deployed_at":"2026-06-07T06:01:48.904Z","closed_at":null,"strategy":"spot","bins_below":47,"lower_bin":-344,"upper_bin":-297,"active_bin_at_deploy":-297,"bin_step":80,"amount_sol":0.5,"initial_value_usd":32.03496654355243,"sol_price_at_deploy":64.06993308710486,"deploy_rationale":null,"base_mint":"FeMbDoX7R1Psc4GEcvJdsbNbZA3bfztcyDCatJVJpump","volatility":1.7182,"fee_tvl_ratio":0.0324,"organic_score":88,"deploy_gas_sol":5e-06,"close_gas_sol":5e-06,"gas_priority_fee":0,"gas_cost_sol":1e-05,"last_sync_at":"2026-06-07T06:20:01.860Z","_oor_since":null,"_oor_minutes":0,"_peak_pnl_pct":0,"_peak_pnl_sol_pct":0,"_trailing_active":false,"_trailing_pending":false,"_trailing_pending_since":null,"snapshots":[{"at":"2026-06-07T06:10:01.654Z","pnl_pct":-0.8460180754812073,"pnl_sol_pct":-0.9170416000000126,"value_usd":31.763944936119618,"value_sol":0.49527313199999995,"unclaimed_fees_usd":0.009082652581860546,"sol_price":64.1158589712025,"active_bin":-298,"oor_minutes":0},{"at":"2026-06-07T06:20:01.860Z","pnl_pct":-0.282691271887683,"pnl_sol_pct":-0.8303872000000045,"value_usd":31.944406489181667,"value_sol":0.495242146,"unclaimed_fees_usd":0.039035527808599,"sol_price":64.42377979957519,"active_bin":-302,"oor_minutes":0}],"close_reason":null,"close_pnl_usd":null,"close_pnl_pct":null}],"lastUpdated":"2026-06-07T06:20:01.861Z"};
+
+const POSITIONS = SIM_DATA.virtual_positions;
+const COLORS = ['#00d4ff','#ff6b9d','#51cf66','#fcc419','#cc5de8'];
+
+// Real data storage (populated by fetch)
+const REAL_DATA = {"HENRY-SOL":{"real_bin":-486,"fetched":true,"error":null,"account_size":904,"fetched_at":"2026-06-07T08:22:00Z"},"Magpie-SOL":{"real_bin":-479,"fetched":true,"error":null,"account_size":904,"fetched_at":"2026-06-07T08:22:00Z"},"Bountywork-SOL":{"real_bin":-485,"fetched":true,"error":null,"account_size":904,"fetched_at":"2026-06-07T08:22:00Z"},"GACHA-SOL":{"real_bin":-463,"fetched":true,"error":null,"account_size":904,"fetched_at":"2026-06-07T08:22:00Z"},"three-SOL":{"real_bin":-317,"fetched":true,"error":null,"account_size":904,"fetched_at":"2026-06-07T08:22:00Z"}};
+
+// Build comparison
+function buildComparison() {
+  return POSITIONS.map(vp => {
+    const name = vp.pool_name;
+    const sim_bin = vp.snapshots && vp.snapshots.length > 0
+      ? vp.snapshots[vp.snapshots.length-1].active_bin
+      : vp.active_bin_at_deploy;
+    const real = REAL_DATA[name];
+    const fetched = real && real.fetched;
+    const bin_diff = fetched && real.real_bin !== null ? real.real_bin - sim_bin : null;
+
+    let accuracy = null;
+    if (bin_diff !== null) {
+      const range = Math.abs(vp.upper_bin - vp.lower_bin);
+      accuracy = Math.max(0, 100 - (Math.abs(bin_diff) / range * 100));
+    }
+
+    const latestSnap = vp.snapshots && vp.snapshots.length > 0
+      ? vp.snapshots[vp.snapshots.length-1]
+      : null;
+
+    return {
+      name, pool: vp.pool,
+      deploy_bin: vp.active_bin_at_deploy,
+      sim_bin, real_bin: fetched ? real.real_bin : null, bin_diff,
+      lower_bin: vp.lower_bin, upper_bin: vp.upper_bin, bin_step: vp.bin_step,
+      latest_pnl: latestSnap ? latestSnap.pnl_pct : 0,
+      peak_pnl: vp._peak_pnl_pct || 0,
+      value_usd: latestSnap ? latestSnap.value_usd : vp.initial_value_usd,
+      value_sol: latestSnap ? latestSnap.value_sol : 0,
+      unclaimed_fees: latestSnap ? latestSnap.unclaimed_fees_usd : 0,
+      sol_price: latestSnap ? latestSnap.sol_price : vp.sol_price_at_deploy,
+      snapshots: vp.snapshots || [],
+      accuracy, fetched,
+      error: fetched ? real.error : null,
+      oor_minutes: vp._oor_minutes || 0,
+      volatility: vp.volatility || 0,
+      organic_score: vp.organic_score || 0,
+      amount_sol: vp.amount_sol
+    };
+  });
+}
+
+// Format helpers
+const fmtPct = (v,d=2) => `${v>=0?'+':''}${v.toFixed(d)}%`;
+const fmtUsd = v => `$${v.toFixed(2)}`;
+const fmtSol = v => `${v.toFixed(4)} SOL`;
+const fmtTime = s => new Date(s).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+const fmtDateTime = s => new Date(s).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
+
+// KPI render
+function renderKPI() {
+  const comp = buildComparison();
+  const fetched = comp.filter(c=>c.fetched);
+  const matched = fetched.filter(c=>c.bin_diff !== null && Math.abs(c.bin_diff) <= 5);
+  const deviated = fetched.filter(c=>c.bin_diff !== null && Math.abs(c.bin_diff) > 5);
+  const avgAcc = fetched.length ? fetched.reduce((s,c)=>s+(c.accuracy||0),0)/fetched.length : 0;
+  const totalPnl = comp.reduce((s,c)=>s+c.latest_pnl,0);
+  const totalOor = comp.reduce((s,c)=>s+c.oor_minutes,0);
+
+  document.getElementById('kpi').innerHTML = [
+    {l:'Open Positions',v:comp.length,sub:'all active',c:'c'},
+    {l:'Total Capital',v:`${comp[0].amount_sol*comp.length} SOL`,sub:`~${fmtUsd(comp.reduce((s,c)=>s+c.value_usd,0))}`,c:'p'},
+    {l:'Combined PnL',v:fmtPct(totalPnl),sub:'latest snapshot',c:totalPnl>=0?'g':'r'},
+    {l:'Best Peak PnL',v:fmtPct(Math.max(...comp.map(c=>c.peak_pnl))),sub:'across all positions',c:'y'},
+    {l:'Total Snapshots',v:comp.reduce((s,c)=>s+c.snapshots.length,0),sub:'price data points',c:'w'},
+    {l:'Total OOR',v:`${totalOor} min`,sub:'out of range',c:totalOor>0?'o':'g'},
+    {l:'Real Data',v:fetched.length?`${fetched.length} pools`:'None',sub:fetched.length?'from Solana':'click fetch button',c:'c'},
+  ].map(k=>`<div class="k ${k.c}"><div class="k-l">${k.l}</div><div class="k-v" style="color:${({c:'#00d4ff',g:'#51cf66',r:'#ff4757',y:'#fcc419',p:'#a855f7',o:'#ff922b',w:'#ffffff'})[k.c]}">${k.v}</div><div class="k-s">${k.sub}</div></div>`).join('');
+}
+
+// Compare cards
+function renderCompareCards() {
+  const comp = buildComparison();
+  document.getElementById('compareGrid').innerHTML = comp.map(c => {
+    const statusClass = !c.fetched ? 'no-data'
+      : Math.abs(c.bin_diff||0) <= 5 ? 'match'
+      : Math.abs(c.bin_diff||0) <= 20 ? 'deviation' : 'big-dev';
+
+    const badge = !c.fetched
+      ? '<span class="c-badge" style="background:#55555520;color:#888;border:1px solid #55555540">⏳ Awaiting Fetch</span>'
+      : Math.abs(c.bin_diff||0) <= 5
+        ? '<span class="c-badge" style="background:#51cf6620;color:#51cf66;border:1px solid #51cf6640">✅ Match</span>'
+      : Math.abs(c.bin_diff||0) <= 20
+        ? '<span class="c-badge" style="background:#fcc41920;color:#fcc419;border:1px solid #fcc41940">⚠️ Deviation</span>'
+        : '<span class="c-badge" style="background:#ff475720;color:#ff4757;border:1px solid #ff475740">❌ Big Deviation</span>';
+
+    const diffBadge = c.bin_diff !== null
+      ? `<span class="diff ${Math.abs(c.bin_diff)<=5?'ok':Math.abs(c.bin_diff)<=20?'warn':'err'}">${c.bin_diff>=0?'+':''}${c.bin_diff}</span>`
+      : '';
+
+    // Bin visualization
+    const range = c.upper_bin - c.lower_bin;
+    const simPos = ((c.sim_bin - c.lower_bin) / range) * 100;
+    const realPos = c.real_bin !== null ? ((c.real_bin - c.lower_bin) / range) * 100 : null;
+    const gaugeColor = c.accuracy !== null ? (c.accuracy >= 80 ? '#51cf66' : c.accuracy >= 50 ? '#fcc419' : '#ff4757') : '#555';
+
+    return `
+    <div class="compare-card ${statusClass}">
+      <div class="c-head">
+        <span class="c-name">${c.name}</span>
+        ${badge}
+      </div>
+      <div class="c-row"><span class="c-l">Capital</span><span class="c-v c">${c.amount_sol} SOL (~${fmtUsd(c.value_usd)})</span></div>
+      <div class="c-row"><span class="c-l">Range</span><span class="c-v">${c.lower_bin} → ${c.upper_bin} (step ${c.bin_step})</span></div>
+      <div class="c-row"><span class="c-l">Deploy Bin</span><span class="c-v p">${c.deploy_bin}</span></div>
+      <div class="c-row"><span class="c-l">Simulated Bin (latest)</span><span class="c-v p">${c.sim_bin}</span></div>
+      <div class="c-row"><span class="c-l">Real Bin (on-chain)</span><span class="c-v c">${c.fetched ? c.real_bin : '—'}${diffBadge}</span></div>
+      <div class="c-row"><span class="c-l">Latest PnL</span><span class="c-v ${c.latest_pnl>=0?'g':'r'}">${fmtPct(c.latest_pnl)}</span></div>
+      <div class="c-row"><span class="c-l">Peak PnL</span><span class="c-v y">${fmtPct(c.peak_pnl)}</span></div>
+      <div class="c-row"><span class="c-l">Unclaimed Fees</span><span class="c-v y">${fmtUsd(c.unclaimed_fees)}</span></div>
+      <div class="c-row"><span class="c-l">SOL Price</span><span class="c-v">${fmtUsd(c.sol_price)}</span></div>
+      <div class="c-row"><span class="c-l">OOR</span><span class="c-v ${c.oor_minutes>0?'o':'g'}">${c.oor_minutes} min</span></div>
+      <div class="c-row"><span class="c-l">Volatility</span><span class="c-v">${c.volatility.toFixed(2)}%</span></div>
+      <div class="c-row"><span class="c-l">Organic Score</span><span class="c-v">${c.organic_score}</span></div>
+      <div class="c-row"><span class="c-l">Snapshots</span><span class="c-v">${c.snapshots.length}</span></div>
+      ${c.error ? `<div class="c-row"><span class="c-l">Error</span><span class="c-v r">${c.error}</span></div>` : ''}
+
+      ${c.accuracy !== null ? `
+      <div class="gauge">
+        <div class="gauge-label"><span style="color:#888">Accuracy</span><span style="color:${gaugeColor}" class="mono">${c.accuracy.toFixed(1)}%</span></div>
+        <div class="gauge-track"><div class="gauge-fill" style="width:${c.accuracy}%;background:${gaugeColor}"></div></div>
+      </div>` : ''}
+
+      <div class="bin-viz">
+        <div class="bin-track">
+          <div class="bin-range" style="left:0;width:100%"></div>
+          <div class="bin-marker" style="left:${Math.max(0,Math.min(100,simPos))}%;background:#a855f7" title="Simulated: ${c.sim_bin}"></div>
+          ${realPos !== null ? `<div class="bin-marker" style="left:${Math.max(0,Math.min(100,realPos))}%;background:#00d4ff" title="Real: ${c.real_bin}"></div>` : ''}
+        </div>
+        <div class="bin-labels"><span>${c.lower_bin}</span><span>Deploy: ${c.deploy_bin}</span><span>${c.upper_bin}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// PnL chart
+function renderPnlChart() {
+  const svg = document.getElementById('pnlChart');
+  const W=1200,H=220,PAD={t:15,r:20,b:40,l:60};
+  const cw=W-PAD.l-PAD.r, ch=H-PAD.t-PAD.b;
+  let html='';
+
+  // Find global min/max for scaling
+  let allPnl = [];
+  POSITIONS.forEach(vp => {
+    (vp.snapshots||[]).forEach(s => allPnl.push(s.pnl_pct));
+  });
+  if(!allPnl.length) { svg.innerHTML='<text x="600" y="110" text-anchor="middle" fill="#555" font-size="12">No snapshot data</text>'; return; }
+  const minPnl = Math.min(...allPnl) - 1;
+  const maxPnl = Math.max(...allPnl) + 1;
+  const pnlRange = maxPnl - minPnl || 1;
+
+  // Find global time range
+  let allTimes = [];
+  POSITIONS.forEach(vp => (vp.snapshots||[]).forEach(s => allTimes.push(new Date(s.at).getTime())));
+  const minTime = Math.min(...allTimes);
+  const maxTime = Math.max(...allTimes);
+  const timeRange = maxTime - minTime || 1;
+
+  // Grid lines
+  const gridSteps = [-2,0,2,4,6,8,10];
+  gridSteps.forEach(pnl => {
+    if(pnl >= minPnl && pnl <= maxPnl) {
+      const y = PAD.t + ch - ((pnl - minPnl) / pnlRange) * ch;
+      html += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" stroke="#ffffff08" stroke-width="1"/>`;
+      html += `<text x="${PAD.l-5}" y="${y+3}" text-anchor="end" fill="#444" font-size="9">${pnl}%</text>`;
+    }
+  });
+
+  // Zero line
+  if(minPnl <= 0 && maxPnl >= 0) {
+    const y0 = PAD.t + ch - ((0 - minPnl) / pnlRange) * ch;
+    html += `<line x1="${PAD.l}" y1="${y0}" x2="${W-PAD.r}" y2="${y0}" stroke="#ffffff15" stroke-width="1"/>`;
+  }
+
+  // Draw lines for each position
+  POSITIONS.forEach((vp, idx) => {
+    const snaps = vp.snapshots || [];
+    if(snaps.length < 2) return;
+    const color = COLORS[idx % COLORS.length];
+
+    let pathD = '';
+    snaps.forEach((s, si) => {
+      const x = PAD.l + ((new Date(s.at).getTime() - minTime) / timeRange) * cw;
+      const y = PAD.t + ch - ((s.pnl_pct - minPnl) / pnlRange) * ch;
+      pathD += si === 0 ? `M${x},${y}` : `L${x},${y}`;
+    });
+    html += `<path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" opacity="0.8">
+      <title>${vp.pool_name}</title>
+    </path>`;
+
+    // End dot
+    const lastSnap = snaps[snaps.length-1];
+    const lx = PAD.l + ((new Date(lastSnap.at).getTime() - minTime) / timeRange) * cw;
+    const ly = PAD.t + ch - ((lastSnap.pnl_pct - minPnl) / pnlRange) * ch;
+    html += `<circle cx="${lx}" cy="${ly}" r="3" fill="${color}"/>`;
+    html += `<text x="${lx+6}" y="${ly+3}" fill="${color}" font-size="8">${vp.pool_name}</text>`;
+  });
+
+  // X-axis labels
+  const hours = [];
+  for(let t = minTime; t <= maxTime; t += 3600000) {
+    const x = PAD.l + ((t - minTime) / timeRange) * cw;
+    const label = new Date(t).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+    html += `<text x="${x}" y="${H-5}" text-anchor="middle" fill="#444" font-size="9">${label}</text>`;
+    html += `<line x1="${x}" y1="${PAD.t}" x2="${x}" y2="${PAD.t+ch}" stroke="#ffffff05" stroke-width="1"/>`;
+  }
+
+  svg.innerHTML = html;
+}
+
+// Bin comparison chart
+function renderBinChart() {
+  const svg = document.getElementById('binChart');
+  const W=1200,H=220,PAD={t:15,r:20,b:40,l:60};
+  const cw=W-PAD.l-PAD.r, ch=H-PAD.t-PAD.b;
+  const comp = buildComparison().filter(c=>c.fetched);
+  if(!comp.length) { svg.innerHTML='<text x="600" y="110" text-anchor="middle" fill="#555" font-size="12">Click "Fetch Real Pool Data" to load on-chain data</text>'; return; }
+
+  const barW = Math.max(40, (cw/comp.length) - 20);
+  let html = '';
+
+  comp.forEach((c,i) => {
+    const x = PAD.l + (i/comp.length)*cw + barW/2;
+    const range = Math.abs(c.upper_bin - c.lower_bin);
+    const simOffset = c.sim_bin - c.deploy_bin;
+    const realOffset = c.real_bin !== null ? (c.real_bin - c.deploy_bin) : null;
+    const maxOffset = Math.max(Math.abs(simOffset), Math.abs(realOffset||0), 5);
+    const simH = (Math.abs(simOffset) / maxOffset) * (ch * 0.4);
+    const realH = realOffset !== null ? (Math.abs(realOffset) / maxOffset) * (ch * 0.4) : 0;
+    const zeroY = PAD.t + ch * 0.6;
+
+    // Simulated bar
+    const simY = simOffset >= 0 ? zeroY - simH : zeroY;
+    html += `<rect x="${x}" y="${simY}" width="${barW/2-4}" height="${Math.max(3,simH)}" rx="3" fill="#a855f7" opacity="0.7">
+      <title>${c.name} (Sim)\nBin: ${c.sim_bin}\nOffset: ${simOffset>=0?'+':''}${simOffset}</title>
+    </rect>`;
+
+    // Real bar
+    if(realOffset !== null) {
+      const realY = realOffset >= 0 ? zeroY - realH : zeroY;
+      html += `<rect x="${x+barW/2+4}" y="${realY}" width="${barW/2-4}" height="${Math.max(3,realH)}" rx="3" fill="#00d4ff" opacity="0.7">
+        <title>${c.name} (Real)\nBin: ${c.real_bin}\nOffset: ${realOffset>=0?'+':''}${realOffset}</title>
+      </rect>`;
+    }
+
+    // Label
+    html += `<text x="${x+barW/2}" y="${H-6}" text-anchor="middle" fill="#555" font-size="9">${c.name.replace('-SOL','')}</text>`;
+
+    // Diff badge
+    if(c.bin_diff !== null) {
+      const diffColor = Math.abs(c.bin_diff) <= 5 ? '#51cf66' : Math.abs(c.bin_diff) <= 20 ? '#fcc419' : '#ff4757';
+      html += `<text x="${x+barW/2}" y="${PAD.t+10}" text-anchor="middle" fill="${diffColor}" font-size="10" font-weight="600">${c.bin_diff>=0?'+':''}${c.bin_diff}</text>`;
+    }
+  });
+
+  // Zero line
+  html += `<line x1="${PAD.l}" y1="${zeroY}" x2="${W-PAD.r}" y2="${zeroY}" stroke="#ffffff15" stroke-width="1"/>`;
+  html += `<text x="${PAD.l-5}" y="${zeroY+4}" text-anchor="end" fill="#555" font-size="9">Deploy</text>`;
+
+  // Legend
+  html += `<rect x="${PAD.l}" y="4" width="10" height="10" rx="2" fill="#a855f7" opacity="0.7"/>`;
+  html += `<text x="${PAD.l+14}" y="13" fill="#888" font-size="10">Simulated</text>`;
+  html += `<rect x="${PAD.l+90}" y="4" width="10" height="10" rx="2" fill="#00d4ff" opacity="0.7"/>`;
+  html += `<text x="${PAD.l+104}" y="13" fill="#888" font-size="10">Real (on-chain)</text>`;
+  html += `<text x="${PAD.l+200}" y="13" fill="#555" font-size="9">Numbers = bin diff (closer to 0 = more accurate)</text>`;
+
+  svg.innerHTML = html;
+}
+
+// Snapshot sections
+function renderSnapshots() {
+  document.getElementById('snapSections').innerHTML = POSITIONS.map((vp, i) => {
+    const snaps = (vp.snapshots || []).slice(-10).reverse();
+    const rows = snaps.map(s => `<tr>
+      <td>${fmtTime(s.at)}</td>
+      <td style="color:#a855f7">${s.active_bin}</td>
+      <td style="color:${s.pnl_pct>=0?'#51cf66':'#ff4757'}">${fmtPct(s.pnl_pct)}</td>
+      <td>${fmtUsd(s.value_usd)}</td>
+      <td>${fmtSol(s.value_sol)}</td>
+      <td>${fmtUsd(s.unclaimed_fees_usd)}</td>
+      <td>${fmtUsd(s.sol_price)}</td>
+      <td>${s.oor_minutes}</td>
+    </tr>`).join('');
+
+    return `
+    <div class="snap-section">
+      <div class="snap-head" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <h3 style="color:${COLORS[i]}">${vp.pool_name} — ${vp.snapshots.length} snapshots</h3>
+        <span class="arrow">▶</span>
+      </div>
+      <div class="snap-body">
+        <table class="snap-tbl">
+          <thead><tr><th>Time</th><th>Bin</th><th>PnL %</th><th>USD</th><th>SOL</th><th>Fees</th><th>SOL Price</th><th>OOR</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Fetch real data from Solana RPC
+function decodeActiveBin(base64Data) {
+  const raw = atob(base64Data);
+  return raw.charCodeAt(48) | (raw.charCodeAt(49) << 8) |
+         (raw.charCodeAt(50) << 16) | (raw.charCodeAt(51) << 24);
+}
+
+async function fetchSolanaRPC(address) {
+  const body = JSON.stringify({
+    jsonrpc: "2.0", id: 1, method: "getAccountInfo",
+    params: [address, {"encoding": "base64"}]
+  });
+
+  // Direct to Solana RPC (has CORS headers)
+  try {
+    const resp = await fetch("https://api.mainnet-beta.solana.com", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body,
+      signal: AbortSignal.timeout(10000)
+    });
+    if (resp.ok) return await resp.json();
+  } catch(e) {}
+
+  // Fallback: try alternative RPC
+  try {
+    const resp = await fetch("https://solana-mainnet.g.alchemy.com/v2/demo", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body,
+      signal: AbortSignal.timeout(10000)
+    });
+    if (resp.ok) return await resp.json();
+  } catch(e) {}
+
+  throw new Error("All RPC endpoints failed");
+}
+
+async function fetchRealData() {
+  const btn = document.getElementById('fetchBtn');
+  const status = document.getElementById('fetchStatus');
+  btn.disabled = true;
+  btn.textContent = '⏳ Fetching...';
+  status.textContent = 'Connecting to Solana RPC...';
+  status.style.color = '#00d4ff';
+
+  let successCount = 0, failCount = 0;
+
+  for (let i = 0; i < POSITIONS.length; i++) {
+    const vp = POSITIONS[i];
+    const name = vp.pool_name;
+    status.textContent = `Fetching ${name} (${i+1}/${POSITIONS.length})...`;
+
+    try {
+      const rpcResp = await fetchSolanaRPC(vp.pool);
+      if (rpcResp.result && rpcResp.result.value) {
+        const base64Data = rpcResp.result.value.data[0];
+        const activeBin = decodeActiveBin(base64Data);
+        REAL_DATA[name] = {
+          real_bin: activeBin, bin_step: vp.bin_step,
+          fetched: true, error: null,
+          fetched_at: new Date().toISOString()
+        };
+        successCount++;
+      } else {
+        REAL_DATA[name] = {real_bin:null,bin_step:null,fetched:false,error:"Account not found (pool closed?)"};
+        failCount++;
+      }
+    } catch(e) {
+      REAL_DATA[name] = {real_bin:null,bin_step:null,fetched:false,error:e.message};
+      failCount++;
+    }
+  }
+
+  // Re-render everything
+  renderKPI();
+  renderCompareCards();
+  renderBinChart();
+
+  btn.disabled = false;
+  btn.textContent = '🔗 Fetch Real Pool Data from Solana';
+  const now = new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  status.textContent = `Fetched ${successCount}/${successCount+failCount} pools • ${now}`;
+  status.style.color = successCount > 0 ? '#51cf66' : '#ff4757';
+  document.getElementById('fetchTime').textContent = new Date().toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
+}
+
+// Init
+document.getElementById('fetchTime').textContent = new Date().toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
+document.getElementById('footerTime').textContent = new Date().toLocaleString('id-ID');
+renderKPI();
+renderCompareCards();
+renderPnlChart();
+renderBinChart();
+renderSnapshots();
+</script>
+</body>
+</html>
